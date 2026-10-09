@@ -1,5 +1,5 @@
 
-from fastapi import FastAPI, UploadFile, File,HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException
 import assemblyai as aai
 from google import genai
 from dotenv import load_dotenv
@@ -16,12 +16,12 @@ aai.settings.api_key = ASSEMBLYAI_API_KEY
 
 # Gemini API key
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-client = genai.Client(api_key=GEMINI_API_KEY)
+client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
-
+# Create FastAPI application
 app = FastAPI()
 
-# Authentication routes
+# Register authentication routes once
 app.include_router(auth_router)
 
 
@@ -32,6 +32,12 @@ def home():
 
 @app.get("/test-gemini")
 def test_gemini():
+    if client is None:
+        raise HTTPException(
+            status_code=500,
+            detail="GEMINI_API_KEY is missing from .env"
+        )
+
     response = client.models.generate_content(
         model="gemini-3.6-flash",
         contents="Say hello to Audio Flash in one short sentence."
@@ -47,7 +53,6 @@ async def upload_audio(file: UploadFile = File(...)):
         "filename": file.filename,
         "content_type": file.content_type
     }
-
 
 
 @app.post("/api/audio/transcribe")
@@ -72,9 +77,21 @@ async def transcribe_audio(file: UploadFile = File(...)):
             detail="The uploaded audio file is empty."
         )
 
+    if not ASSEMBLYAI_API_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="ASSEMBLYAI_API_KEY is missing from .env"
+        )
+
+    if client is None:
+        raise HTTPException(
+            status_code=500,
+            detail="GEMINI_API_KEY is missing from .env"
+        )
+
     try:
         # Transcribe audio using AssemblyAI
-        aai.settings.api_key = os.getenv("ASSEMBLYAI_API_KEY")
+        aai.settings.api_key = ASSEMBLYAI_API_KEY
         transcriber = aai.Transcriber()
         transcript = transcriber.transcribe(audio_data)
 
@@ -110,5 +127,6 @@ Hindi text:
     except Exception:
         raise HTTPException(
             status_code=502,
-            detail="Audio processing failed. Please try again."
+            detail="Audio processing failed. Please check your API keys and try again."
         )
+

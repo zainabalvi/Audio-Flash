@@ -1,3 +1,4 @@
+
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 
@@ -21,14 +22,3 @@ def get_current_user(
         )
 
     return payload
-
-from auth.dependencies import get_current_user
-
-@router.get("/me")
-def get_my_profile(
-    current_user: dict = Depends(get_current_user)
-):
-    return {
-        "message": "You are authenticated",
-        "user_id": current_user.get("sub")
-    }

@@ -5,8 +5,13 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import User
 from auth.schemas import UserRegister ,UserLogin, Token
-from auth.security import ( hash_password, verify_password, create_access_token, get_current_user)
-
+from auth.security import ( 
+hash_password,
+ verify_password, 
+create_access_token
+)
+from auth.dependencies import get_current_user
+ 
 
 router = APIRouter(
     prefix="/api/auth",
