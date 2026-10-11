@@ -3,3 +3,22 @@ backend/__pycache__/
 *.pyc
 .next/
 node_modules/
+
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Python test caches
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Secret-scanning report accidentally created
+sible secret was found in an added line.*
