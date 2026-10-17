@@ -1,12 +1,16 @@
 
+from flashcard_routes import router as flashcard_router
+
 from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 import assemblyai as aai
 from google import genai
 from dotenv import load_dotenv
 import os
 
 from auth.routes import router as auth_router
-
+from database import Base, engine
+import models
 # Load environment variables from .env
 load_dotenv()
 
@@ -20,6 +24,20 @@ client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 # Create FastAPI application
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://10.10.103.128:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+Base.metadata.create_all(bind=engine)
+app.include_router(auth_router)
+app.include_router(flashcard_router)
 
 # Register authentication routes once
 app.include_router(auth_router)
