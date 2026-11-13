@@ -59,7 +59,9 @@ export default function DashboardPage() {
 
         const user = await response.json();
 
-        setToken(savedToken);
+        if (savedToken) {
+  setToken(savedToken);
+}
         setUsername(user.username || user.email || "Student");
         setMessage("Welcome to your learning space.");
         setReady(true);
