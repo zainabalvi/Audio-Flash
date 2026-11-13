@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 import os
 import json
+
 from google import genai
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
@@ -10,18 +11,23 @@ from sqlalchemy.orm import Session
 from auth.dependencies import get_current_user
 from database import get_db
 from models import Flashcard
+
 load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
-
 router = APIRouter(
     prefix="/api/flashcards",
     tags=["Flashcards"]
 )
+
+
+# Request models
+
 class TranscriptRequest(BaseModel):
     transcript: str = Field(min_length=1, max_length=50000)
+
 
 class FlashcardCreate(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
@@ -32,6 +38,18 @@ class FlashcardCreate(BaseModel):
         max_length=50
     )
 
+
+class FlashcardUpdate(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)
+    answer: str = Field(min_length=1, max_length=5000)
+    category: str = Field(
+        default="concept",
+        min_length=1,
+        max_length=50
+    )
+
+
+# Create a flashcard
 
 @router.post("/", status_code=201)
 def create_flashcard(
@@ -83,7 +101,7 @@ def create_flashcard(
         )
 
 
-
+# Get all flashcards for the logged-in user
 
 @router.get("/")
 def get_flashcards(
@@ -107,6 +125,112 @@ def get_flashcards(
         for card in flashcards
     ]
 
+
+# Edit an existing flashcard
+
+@router.put("/{card_id}")
+def update_flashcard(
+    card_id: int,
+    card: FlashcardUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    question = card.question.strip()
+    answer = card.answer.strip()
+    category = card.category.strip().lower()
+
+    if not question or not answer:
+        raise HTTPException(
+            status_code=422,
+            detail="Question and answer cannot be empty."
+        )
+
+    if category not in {"concept", "formula", "definition"}:
+        raise HTTPException(
+            status_code=422,
+            detail="Category must be concept, formula, or definition."
+        )
+
+    existing_card = (
+        db.query(Flashcard)
+        .filter(
+            Flashcard.id == card_id,
+            Flashcard.user_id == current_user.id
+        )
+        .first()
+    )
+
+    if existing_card is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Flashcard not found."
+        )
+
+    try:
+        existing_card.question = question
+        existing_card.answer = answer
+        existing_card.category = category
+
+        db.commit()
+        db.refresh(existing_card)
+
+        return {
+            "message": "Flashcard updated successfully.",
+            "id": existing_card.id,
+            "question": existing_card.question,
+            "answer": existing_card.answer,
+            "category": existing_card.category
+        }
+
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Could not update the flashcard."
+        )
+
+
+# Delete a flashcard
+
+@router.delete("/{card_id}")
+def delete_flashcard(
+    card_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    existing_card = (
+        db.query(Flashcard)
+        .filter(
+            Flashcard.id == card_id,
+            Flashcard.user_id == current_user.id
+        )
+        .first()
+    )
+
+    if existing_card is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Flashcard not found."
+        )
+
+    try:
+        db.delete(existing_card)
+        db.commit()
+
+        return {
+            "message": "Flashcard deleted successfully.",
+            "id": card_id
+        }
+
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Could not delete the flashcard."
+        )
+
+
+# Generate flashcards using Gemini
 
 @router.post("/generate")
 def generate_flashcards(
@@ -171,9 +295,14 @@ Lecture transcript:
         saved_cards = []
 
         for item in generated_cards:
+            if not isinstance(item, dict):
+                continue
+
             question = str(item.get("question", "")).strip()
             answer = str(item.get("answer", "")).strip()
-            category = str(item.get("category", "concept")).strip().lower()
+            category = str(
+                item.get("category", "concept")
+            ).strip().lower()
 
             if not question or not answer:
                 continue
@@ -219,9 +348,13 @@ Lecture transcript:
     except HTTPException:
         db.rollback()
         raise
+
     except Exception:
         db.rollback()
         raise HTTPException(
             status_code=502,
-            detail="Flashcard generation failed. Check the Gemini model, API key, and response."
+            detail=(
+                "Flashcard generation failed. Check the Gemini model, "
+                "API key, and response."
+            )
         )
