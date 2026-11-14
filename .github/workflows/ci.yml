@@ -1,4 +1,4 @@
-name: Audio Flash CI
+name: Week 7: Complete midterm prototype milestone
 
 on:
   push:
